@@ -49,8 +49,7 @@ namespace LightVNTool
                 var name = Path.GetFileName(mc);
                 string outPath;
 
-                var relativePath = FileNameList.FirstOrDefault(f => f.Value == name).Key;
-                if (IfRecoverName && relativePath != null)
+                if (IfRecoverName && FileNameList.TryGetValue(name, out var relativePath))
                 {
                     outPath = Path.Combine(outDir, relativePath);
                 }
@@ -59,7 +58,7 @@ namespace LightVNTool
                     outPath = Path.Combine(outDir, name);
                 }
 
-                Console.WriteLine($"[{Count}/{mcdatFiles.Length}] Processing {name}");
+                Console.WriteLine($"[{Count}/{mcdatFiles.Length}] Unpack {name}");
                 Count++;
 
                 if (name.Equals("0.mcdat"))
@@ -70,6 +69,59 @@ namespace LightVNTool
                 Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
                 byte[] decFileData = XorMcdat(File.ReadAllBytes(mc));
                 File.WriteAllBytes(outPath, decFileData);
+
+            }
+        }
+
+        public void Repack(string inDir)
+        {
+            bool ProcessName = true;
+
+            var outDir = Path.Combine(Directory.GetParent(inDir)?.FullName ?? inDir, "Newmcdat");
+            if (!Directory.Exists(outDir))
+            {
+                Directory.CreateDirectory(outDir);
+            }
+
+            string NameListPath = Path.Combine(inDir, "0.mcdat.json");
+            if (File.Exists(NameListPath))
+            {
+                var jsonData = File.ReadAllBytes(NameListPath);
+                var filemap = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonData, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+                FileNameList = filemap.ToDictionary(kvp => kvp.Key, kvp => Path.GetFileName(kvp.Value));
+                var encData = XorZeroMcdat(jsonData);
+                File.WriteAllBytes(Path.Combine(outDir, "0.mcdat"), encData);
+            }
+            else
+            {
+                ProcessName = false;
+            }
+
+            int count = 1;
+            var filesList = Directory.GetFiles(inDir, "*", SearchOption.AllDirectories)
+                                     .Where(f => !Path.GetFileName(f).Equals("0.mcdat.json", StringComparison.OrdinalIgnoreCase));
+
+            foreach(var filepath in filesList)
+            {
+                string relativePath = Path.GetRelativePath(inDir, filepath).Replace('\\', '/');
+                string FileName;
+
+                if(ProcessName && FileNameList.TryGetValue(relativePath, out var name))
+                {
+                    FileName = name;
+                }
+                else
+                {
+                    FileName = Path.GetFileName(filepath);
+                }
+
+                var data = File.ReadAllBytes(filepath);
+                var encdata = XorMcdat(data);
+                if (FileName.Equals("0.mcdat")) encdata = XorZeroMcdat(data);
+                File.WriteAllBytes(Path.Combine(outDir, FileName), encdata);
+
+                Console.WriteLine($"[{count}/{filesList.Count()}] Repack {FileName}");
+                count++;
 
             }
         }
@@ -134,7 +186,7 @@ namespace LightVNTool
             foreach (var item in fileMap)
             {
                 string encFileName = Path.GetFileName(item.Value);
-                result[item.Key] = encFileName;
+                result[encFileName] = item.Key;
             }
             return result;
         }
