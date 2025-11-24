@@ -17,6 +17,7 @@ namespace LightVNTool
                 {
                     Console.WriteLine("Usage: LightVNTool.exe -u <Unpack mcdat files folder>");
                     Console.WriteLine("LightVNTool.exe -p <Repack output folder>");
+                    Console.WriteLine("LightVNTool.exe -patch <Path to Patch folder>");
                     return;
                 }
 
@@ -31,6 +32,10 @@ namespace LightVNTool
                 else if (mode == "-p")
                 {
                     mcdat.Repack(inDir);
+                }
+                else if (mode == "-patch")
+                {
+                    mcdat.MakePatch(inDir);
                 }
             }
             catch (Exception ex)

@@ -58,18 +58,14 @@ namespace LightVNTool
                     outPath = Path.Combine(outDir, name);
                 }
 
+                if (!name.Equals("0.mcdat"))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+                    byte[] decFileData = XorMcdat(File.ReadAllBytes(mc));
+                    File.WriteAllBytes(outPath, decFileData);
+                }
                 Console.WriteLine($"[{Count}/{mcdatFiles.Length}] Unpack {name}");
                 Count++;
-
-                if (name.Equals("0.mcdat"))
-                {
-                    continue;
-                }
-
-                Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
-                byte[] decFileData = XorMcdat(File.ReadAllBytes(mc));
-                File.WriteAllBytes(outPath, decFileData);
-
             }
         }
 
@@ -101,12 +97,12 @@ namespace LightVNTool
             var filesList = Directory.GetFiles(inDir, "*", SearchOption.AllDirectories)
                                      .Where(f => !Path.GetFileName(f).Equals("0.mcdat.json", StringComparison.OrdinalIgnoreCase));
 
-            foreach(var filepath in filesList)
+            foreach (var filepath in filesList)
             {
-                string relativePath = Path.GetRelativePath(inDir, filepath).Replace('\\', '/');
+                string relativePath = Path.GetRelativePath(inDir, filepath).Replace('\\', '/').ToLower();
                 string FileName;
 
-                if(ProcessName && FileNameList.TryGetValue(relativePath, out var name))
+                if (ProcessName && FileNameList.TryGetValue(relativePath, out var name))
                 {
                     FileName = name;
                 }
@@ -125,6 +121,60 @@ namespace LightVNTool
 
             }
         }
+
+        public void MakePatch(string inDir)
+        {
+            var outDir = Path.Combine(Directory.GetParent(inDir)?.FullName ?? inDir, "Patch");
+            if (!Directory.Exists(outDir))
+            {
+                Directory.CreateDirectory(outDir);
+            }
+
+            string NameListPath = Path.Combine(inDir, "0.mcdat.json");
+            if (File.Exists(NameListPath))
+            {
+                var jsonData = File.ReadAllBytes(NameListPath);
+                var filemap = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonData, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+                FileNameList = filemap.ToDictionary(kvp => kvp.Key, kvp => Path.GetFileName(kvp.Value));
+            }
+            else
+            {
+                Console.WriteLine($"Cannot Read 0.mcdat.json, Make Patch Failed");
+                return;
+            }
+
+            int count = 0;
+            Dictionary<string, string> PatchNameList = new Dictionary<string, string>();
+            var filesList = Directory.GetFiles(inDir, "*", SearchOption.AllDirectories)
+                         .Where(f => !Path.GetFileName(f).Equals("0.mcdat.json", StringComparison.OrdinalIgnoreCase));
+
+            foreach (var filepath in filesList)
+            {
+                string relativePath = Path.GetRelativePath(inDir, filepath).Replace('\\', '/').ToLower();
+                string FileName;
+                if (FileNameList.TryGetValue(relativePath, out var name))
+                {
+                    FileName = name;
+                }
+                else
+                {
+                    FileName = $"Patch{count}.mcdat";
+                }
+
+                PatchNameList[relativePath] = "Patch/" + FileName;
+                var data = File.ReadAllBytes(filepath);
+                var encdata = XorMcdat(data);
+                File.WriteAllBytes(Path.Combine(outDir, FileName), encdata);
+                Console.WriteLine($"Patch {relativePath}");
+                count++;
+            }
+
+            var PatchJson = JsonSerializer.SerializeToUtf8Bytes(PatchNameList, new JsonSerializerOptions { WriteIndented = true });
+            var encPatchData = XorZeroMcdat(PatchJson);
+            File.WriteAllBytes(Path.Combine(outDir, "0.mcdat"), encPatchData);
+            Console.WriteLine($"Make Patch {count} files");
+        }
+
 
         private byte[] XorZeroMcdat(byte[] encdata)
         {
