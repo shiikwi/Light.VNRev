@@ -13,6 +13,7 @@ namespace LightVNTool
         private static readonly byte[] KEY = { 0x64, 0x36, 0x63, 0x35, 0x66, 0x4B, 0x49, 0x33,
                                                0x47, 0x67, 0x42, 0x57, 0x70, 0x5A, 0x46, 0x33,
                                                0x54, 0x7A, 0x36, 0x69, 0x61, 0x33, 0x6B, 0x46, 0x30 };
+        private static readonly byte[] REVERSED_KEY = KEY.Reverse().ToArray();
         private Dictionary<string, string> FileNameList = new Dictionary<string, string>();
 
         public void Unpack(string indir)
@@ -42,11 +43,12 @@ namespace LightVNTool
             }
 
             var mcdatFiles = Directory.GetFiles(indir, "*.mcdat");
-            int Count = 1;
+            int count = 0;
 
-            foreach (var mc in mcdatFiles)
+            Parallel.ForEach(mcdatFiles, mc =>
             {
                 var name = Path.GetFileName(mc);
+                var current = Interlocked.Increment(ref count);
                 string outPath;
 
                 if (IfRecoverName && FileNameList.TryGetValue(name, out var relativePath))
@@ -64,9 +66,8 @@ namespace LightVNTool
                     byte[] decFileData = XorMcdat(File.ReadAllBytes(mc));
                     File.WriteAllBytes(outPath, decFileData);
                 }
-                Console.WriteLine($"[{Count}/{mcdatFiles.Length}] Unpack {name}");
-                Count++;
-            }
+                Console.WriteLine($"[{current}/{mcdatFiles.Length}] Unpack {name}");
+            });
         }
 
         public void Repack(string inDir)
@@ -198,8 +199,6 @@ namespace LightVNTool
 
         private byte[] XorMcdat(byte[] buffer)
         {
-            byte[] reversedKey = KEY.Reverse().ToArray();
-
             if (buffer.Length < 100)
             {
                 if (buffer.Length > 0)
@@ -216,7 +215,7 @@ namespace LightVNTool
                 int index = buffer.Length - 99;
                 for (int i = 0; i < 99; i++)
                 {
-                    buffer[i + index] ^= reversedKey[i % reversedKey.Length];
+                    buffer[i + index] ^= REVERSED_KEY[i % REVERSED_KEY.Length];
                 }
             }
 
