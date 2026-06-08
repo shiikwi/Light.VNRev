@@ -1,0 +1,28 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - run: dotnet restore LightVNTool.slnx
+
+      - run: dotnet build LightVNTool.slnx --configuration Release --no-restore
+
+      - run: dotnet publish LightVNTool/LightVNTool.csproj --configuration Release --no-build --output artifacts/LightVNTool
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LightVNTool-net10
+          path: artifacts/LightVNTool
